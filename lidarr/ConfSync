@@ -1,0 +1,17 @@
+#!/usr/bin/with-contenv bash
+### Default values
+scriptVersion="0.1"
+scriptName="ConfSync"
+sleepInterval='24h'
+### Import Settings
+source /config/extended.conf
+#### Import Functions
+source /config/extended/functions
+
+
+if [ "$enableConfSync" == "true" ]; then
+log "Starting extended.conf Sync..."
+# run py script
+python /custom-services.d/python/ConfSync.py
+log "ConfSync Complete."
+fi

@@ -1,5 +1,5 @@
 #!/usr/bin/with-contenv bash
-scriptVersion="2.42"
+scriptVersion="2.43"
 scriptName="Audio"
 
 ### Import Settings
@@ -206,6 +206,8 @@ DownloadFormat () {
 			log "ERROR :: Change audioBitrate to a low, high, or lossless..."
 			log "ERROR :: Exiting..."
 			NotifyWebhook "FatalError" "Invalid audioFormat and audioBitrate options set"
+				log "Script sleeping for $audioScriptInterval..."
+	sleep $audioScriptInterval
 			exit
 		fi
 	else

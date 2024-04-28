@@ -1,5 +1,5 @@
 #!/usr/bin/with-contenv bash
-scriptVersion="2.43"
+scriptVersion="2.42"
 scriptName="Audio"
 
 ### Import Settings
@@ -206,8 +206,6 @@ DownloadFormat () {
 			log "ERROR :: Change audioBitrate to a low, high, or lossless..."
 			log "ERROR :: Exiting..."
 			NotifyWebhook "FatalError" "Invalid audioFormat and audioBitrate options set"
-			log "Script sleeping for $audioScriptInterval..."
-	    sleep $audioScriptInterval
 			exit
 		fi
 	else
@@ -230,8 +228,6 @@ DownloadFormat () {
 			log "ERROR :: Change audioBitrate to a desired bitrate number, example: 192..."
 			log "ERROR :: Exiting..."
 			NotifyWebhook "FatalError" "audioBitrate options set"
-			log "Script sleeping for $audioScriptInterval..."
-	    sleep $audioScriptInterval
 			exit
 		fi
 
@@ -248,8 +244,6 @@ DownloadFormat () {
 			log "ERROR :: Invalid audioFormat options set..."
 			log "ERROR :: Change audioFormat to a desired format (opus or mp3 or aac or alac)"
 			NotifyWebhook "FatalError" "audioFormat options set"
-			log "Script sleeping for $audioScriptInterval..."
-	    sleep $audioScriptInterval
 			exit
 		fi
 
@@ -375,8 +369,6 @@ TidalClientTest () {
 		rm -rf "$audioPath"/incomplete/*
 		NotifyWebhook "Error" "TIDAL not authenticated but configured"
   		tidalClientTest="failed"
-  	log "Script sleeping for $audioScriptInterval..."
-	  sleep $audioScriptInterval
 		exit
 	else
 		rm -rf "$audioPath"/incomplete/*
@@ -980,8 +972,6 @@ DeezerClientTest () {
 		rm -rf $audioPath/incomplete/*
 		NotifyWebhook "Error" "DEEZER not authenticated but configured"
   		deezerClientTest="fail"
-  	log "Script sleeping for $audioScriptInterval..."
-	  sleep $audioScriptInterval
 		exit
 	else
 		rm -rf $audioPath/incomplete/*
@@ -997,8 +987,6 @@ LidarrRootFolderCheck () {
 		log "ERROR :: Configure root folder in Lidarr to continue..."
 		log "ERROR :: Exiting..."
 		NotifyWebhook "FatalError" "No root folder found"
-		log "Script sleeping for $audioScriptInterval..."
-	  sleep $audioScriptInterval
 		exit
 	fi
 }

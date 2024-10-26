@@ -1,5 +1,5 @@
 #!/usr/bin/with-contenv bash
-scriptVersion="2.43"
+scriptVersion="2.48"
 scriptName="Audio"
 
 ### Import Settings
@@ -13,18 +13,22 @@ AddTag () {
 }
 
 AddDownloadClient () {
-  downloadClientCheck=$(curl -s  "$arrUrl/api/v1/downloadclient" --header "X-Api-Key:"${arrApiKey} -H "Content-Type: application/json")
+  downloadClientsData=$(curl -s  "$arrUrl/api/v1/downloadclient" --header "X-Api-Key:"${arrApiKey} -H "Content-Type: application/json")
+  downloadClientCheck="$(echo $downloadClientsData | grep "Arr-Extended")"
   if [ -z "$downloadClientCheck" ]; then
     AddTag
     if [ ! -d "$importPath" ]; then
       mkdir -p "$importPath"
       chmod 777 -R "$importPath"
     fi
-    lidarrProcessIt=$(curl -s "$arrUrl/api/v1/downloadclient" --header "X-Api-Key:"${arrApiKey} -H "Content-Type: application/json" --data-raw "{\"enable\":true,\"protocol\":\"usenet\",\"priority\":10,\"removeCompletedDownloads\":true,\"removeFailedDownloads\":true,\"name\":\"Arr-Extended\",\"fields\":[{\"name\":\"nzbFolder\",\"value\":\"/config/extended/downloads/\"},{\"name\":\"watchFolder\",\"value\":\"$importPath\"}],\"implementationName\":\"Usenet Blackhole\",\"implementation\":\"UsenetBlackhole\",\"configContract\":\"UsenetBlackholeSettings\",\"infoLink\":\"https://wiki.servarr.com/lidarr/supported#usenetblackhole\",\"tags\":[]}")
+	log "Adding download Client"
+    lidarrProcessIt=$(curl -s "$arrUrl/api/v1/downloadclient" --header "X-Api-Key:"${arrApiKey} -H "Content-Type: application/json" --data-raw "{\"enable\":true,\"protocol\":\"usenet\",\"priority\":10,\"removeCompletedDownloads\":true,\"removeFailedDownloads\":true,\"name\":\"Arr-Extended\",\"fields\":[{\"name\":\"nzbFolder\",\"value\":\"$importPath\"},{\"name\":\"watchFolder\",\"value\":\"$importPath\"}],\"implementationName\":\"Usenet Blackhole\",\"implementation\":\"UsenetBlackhole\",\"configContract\":\"UsenetBlackholeSettings\",\"infoLink\":\"https://wiki.servarr.com/lidarr/supported#usenetblackhole\",\"tags\":[]}")
  fi
 }
 
 verifyConfig () {
+  ### Import Settings
+  source /config/extended.conf
   if [ "$enableAudio" != "true" ]; then
     log "Script is not enabled, enable by setting enableAudio to \"true\" by modifying the \"/config/extended.conf\" config file..."
     log "Sleeping (infinity)"
@@ -62,8 +66,13 @@ verifyConfig () {
   if [ -z "$downloadClientTimeOut" ]; then
   	downloadClientTimeOut="10m" # if not set, set to 10 minutes
   fi
+
+  if [ -z "$preferSpecialEditions" ]; then
+    preferSpecialEditions="true"
+  fi 
  
   audioPath="$downloadPath/audio"
+
 
 }
 
@@ -101,6 +110,7 @@ Configuration () {
 	fi
 
 	verifyApiAccess
+	AddDownloadClient
 
 	if [ "$addDeezerTopArtists" == "true" ]; then
 		log "Add Deezer Top $topLimit Artists is enabled"
@@ -174,7 +184,13 @@ Configuration () {
 		log "Beets Tagging Disabled"
 	fi
 
- 	log "Failed Download Attempt Theshold: $failedDownloadAttemptThreshold"
+	if [ "$preferSpecialEditions" == "true" ]; then
+      log "Prefer Special Editions Enabled"
+	else
+      log "Prefer Special Editions Disabled"
+	fi
+
+ 	log "Failed Download Attempt Threshold: $failedDownloadAttemptThreshold"
 	
 }
 
@@ -206,8 +222,8 @@ DownloadFormat () {
 			log "ERROR :: Change audioBitrate to a low, high, or lossless..."
 			log "ERROR :: Exiting..."
 			NotifyWebhook "FatalError" "Invalid audioFormat and audioBitrate options set"
-				log "Script sleeping for $audioScriptInterval..."
-	sleep $audioScriptInterval
+			log "Script sleeping for $audioScriptInterval..."
+			sleep $audioScriptInterval
 			exit
 		fi
 	else
@@ -230,6 +246,8 @@ DownloadFormat () {
 			log "ERROR :: Change audioBitrate to a desired bitrate number, example: 192..."
 			log "ERROR :: Exiting..."
 			NotifyWebhook "FatalError" "audioBitrate options set"
+   			log "Script sleeping for $audioScriptInterval..."
+			sleep $audioScriptInterval
 			exit
 		fi
 
@@ -246,6 +264,8 @@ DownloadFormat () {
 			log "ERROR :: Invalid audioFormat options set..."
 			log "ERROR :: Change audioFormat to a desired format (opus or mp3 or aac or alac)"
 			NotifyWebhook "FatalError" "audioFormat options set"
+   			log "Script sleeping for $audioScriptInterval..."
+			sleep $audioScriptInterval
 			exit
 		fi
 
@@ -371,6 +391,8 @@ TidalClientTest () {
 		rm -rf "$audioPath"/incomplete/*
 		NotifyWebhook "Error" "TIDAL not authenticated but configured"
   		tidalClientTest="failed"
+    		log "Script sleeping for $audioScriptInterval..."
+		sleep $audioScriptInterval
 		exit
 	else
 		rm -rf "$audioPath"/incomplete/*
@@ -630,10 +652,6 @@ DownloadProcess () {
 		fi
 		log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Processing files with beets..."
 		ProcessWithBeets "$audioPath/incomplete"
-
-		if [ -f /config/extended/beets-error ]; then
-			return
-		fi 
 	fi
 
 	# Embed Lyrics into Flac files
@@ -818,32 +836,10 @@ ProcessWithBeets () {
 	fi	
 
 	if [ ! -f "/config/extended/logs/downloaded/musicbrainz_matched/$matchedTagsAlbumReleaseGroupId" ]; then
-		log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Marking MusicBrainz Release Group ($matchedTagsAlbumReleaseGroupId) as succesfully downloaded..."
+		log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Marking MusicBrainz Release Group ($matchedTagsAlbumReleaseGroupId) as successfully downloaded..."
 		touch "/config/extended/logs/downloaded/musicbrainz_matched/$matchedTagsAlbumReleaseGroupId"
 
 	fi
-
-	getLidarrAlbumId=$(curl -s "$arrUrl/api/v1/search?term=lidarr%3A${matchedTagsAlbumReleaseGroupId}&apikey=$arrApiKey" | jq -r .[].album.releases[].albumId | sort -u)
-	checkLidarrAlbumData="$(curl -s "$arrUrl/api/v1/album/$getLidarrAlbumId?apikey=${arrApiKey}")"
-	checkLidarrAlbumPercentOfTracks=$(echo "$checkLidarrAlbumData" | jq -r ".statistics.percentOfTracks")
-
-	if [ "$checkLidarrAlbumPercentOfTracks" = "null" ]; then
-		checkLidarrAlbumPercentOfTracks=0
-		return
-	fi
-
-	if [ ${checkLidarrAlbumPercentOfTracks%%.*} -ge 100 ]; then
-		if [ "$wantedAlbumListSource" == "missing" ]; then
-			log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: ERROR :: Already Imported Album (Missing)"
-			rm -rf "$audioPath/incomplete"/*
-			touch /config/extended/beets-error
-			return
-		else
-			log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Importing Album (Cutoff)"
-			return
-		fi
-	fi
-	
 	
 }
 
@@ -974,6 +970,8 @@ DeezerClientTest () {
 		rm -rf $audioPath/incomplete/*
 		NotifyWebhook "Error" "DEEZER not authenticated but configured"
   		deezerClientTest="fail"
+    		log "Script sleeping for $audioScriptInterval..."
+		sleep $audioScriptInterval
 		exit
 	else
 		rm -rf $audioPath/incomplete/*
@@ -989,6 +987,8 @@ LidarrRootFolderCheck () {
 		log "ERROR :: Configure root folder in Lidarr to continue..."
 		log "ERROR :: Exiting..."
 		NotifyWebhook "FatalError" "No root folder found"
+  		log "Script sleeping for $audioScriptInterval..."
+		sleep $audioScriptInterval
 		exit
 	fi
 }
@@ -1094,7 +1094,7 @@ GetMissingCutOffList () {
       rm /config/extended/cache/notfound.txt /config/extended/cache/tocheck.txt
 
 			lidarrCutoffRecords=$(ls /config/extended/cache/lidarr/list/*-cutoff 2>/dev/null | wc -l)
-			log "$page :: cutoff :: ${lidarrCutoffRecords} ablums found to process!"
+			log "$page :: cutoff :: ${lidarrCutoffRecords} albums found to process!"
 			wantedListAlbumTotal=$lidarrCutoffRecords
 
 			if [ ${lidarrCutoffRecords} -gt 0 ]; then
@@ -1277,7 +1277,11 @@ SearchProcess () {
 		# Get Release Titles
 		OLDIFS="$IFS"
 		IFS=$'\n'
-		lidarrReleaseTitles=$(cat /temp-release-list | awk '{ print length, $0 }' | sort -u -n -s -r | cut -d" " -f2-)
+		if [ "$preferSpecialEditions" == "true" ]; then
+		  lidarrReleaseTitles=$(cat /temp-release-list | awk '{ print length, $0 }' | sort -u -n -s -r | cut -d" " -f2-)
+	    else
+		  lidarrReleaseTitles=$(cat /temp-release-list | awk '{ print length, $0 }' | sort -u -n -s | cut -d" " -f2-)
+		fi
 		lidarrReleaseTitles=($(echo "$lidarrReleaseTitles"))
 		IFS="$OLDIFS"
 
@@ -1713,36 +1717,6 @@ FuzzyTidalSearch () {
 	else
 		log "$1 :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Fuzzy Search :: Tidal :: $type :: $lidarrReleaseTitle :: ERROR :: No results found..."
 	fi	
-}
-
-CheckLidarrBeforeImport () {
-
-	alreadyImported=false		
-	checkLidarrAlbumData="$(curl -s "$arrUrl/api/v1/album/$1?apikey=${arrApiKey}")"
-	checkLidarrAlbumPercentOfTracks=$(echo "$checkLidarrAlbumData" | jq -r ".statistics.percentOfTracks")
-	log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Checking Lidarr for existing files"
-	log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: $checkLidarrAlbumPercentOfTracks% Tracks found"
-	if [ "$checkLidarrAlbumPercentOfTracks" == "null" ]; then
-		checkLidarrAlbumPercentOfTracks=0
-		return
-	fi
-	if [ "${checkLidarrAlbumPercentOfTracks%%.*}" -ge "100" ]; then
-		if [ "$wantedAlbumListSource" == "missing" ]; then
-			log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Already Imported Album (Missing), skipping..."
-			alreadyImported=true
-			return
-		fi
-
-		if [ "$wantedAlbumListSource" == "cutoff" ]; then
-			checkLidarrAlbumFiles="$(curl -s "$arrUrl/api/v1/trackFile?albumId=$1?apikey=${arrApiKey}")"
-			checkLidarrAlbumQualityCutoffNotMet=$(echo "$checkLidarrAlbumFiles" | jq -r ".[].qualityCutoffNotMet")
-			if echo "$checkLidarrAlbumQualityCutoffNotMet" | grep "true" | read; then
-				log "$page :: $wantedAlbumListSource :: $processNumber of $wantedListAlbumTotal :: $lidarrArtistName :: $lidarrAlbumTitle :: $lidarrAlbumType :: Already Imported Album (CutOff - $checkLidarrAlbumQualityCutoffNotMet), skipping..."
-				alreadyImported=true
-				return
-			fi
-		fi
-	fi
 }
 
 LidarrTaskStatusCheck () {

@@ -1,5 +1,5 @@
 #!/usr/bin/with-contenv bash
-scriptVersion="3.7"
+scriptVersion="3.9"
 scriptName="Video"
 
 ### Import Settings
@@ -8,6 +8,8 @@ source /config/extended.conf
 source /config/extended/functions
 
 verifyConfig () {
+        ### Import Settings
+	source /config/extended.conf
 	if [ -z "$videoContainer" ]; then
 		videoContainer="mkv"
 	fi
@@ -220,13 +222,19 @@ DownloadVideo () {
         chmod 777 "$videoDownloadPath/incomplete"
     fi 
 
+    ytdlpConfigurableArgs=""
+    if [ ! -z "$cookiesFile" ]; then
+      ytdlpConfigurableArgs='${ytdlpConfigurableArgs} --cookies "$cookiesFile" '
+    fi
+
+    if [ "$videoInfoJson" == "true" ]; then
+      ytdlpConfigurableArgs='${ytdlpConfigurableArgs} --write-info-json '
+    fi
+
+
     if echo "$1" | grep -i "youtube" | read; then
         if [ $videoContainer = mkv ]; then
-            if [ ! -z "$cookiesFile" ]; then
-                yt-dlp -f "$videoFormat" --no-video-multistreams --cookies "$cookiesFile" -o "$videoDownloadPath/incomplete/${2}${3}" --embed-subs --sub-lang $youtubeSubtitleLanguage --merge-output-format mkv --remux-video mkv --no-mtime --geo-bypass "$1"
-            else
-                yt-dlp -f "$videoFormat" --no-video-multistreams -o "$videoDownloadPath/incomplete/${2}${3}" --embed-subs --sub-lang $youtubeSubtitleLanguage --merge-output-format mkv --remux-video mkv --no-mtime --geo-bypass "$1"
-            fi
+            yt-dlp -f "$videoFormat" --no-video-multistreams -o "$videoDownloadPath/incomplete/${2}${3}" $ytdlpConfigurableArgs --embed-subs --sub-lang $youtubeSubtitleLanguage --merge-output-format mkv --remux-video mkv --no-mtime --geo-bypass "$1"
             if [ -f "$videoDownloadPath/incomplete/${2}${3}.mkv" ]; then
                 chmod 666 "$videoDownloadPath/incomplete/${2}${3}.mkv"
                 downloadFailed=false
@@ -234,11 +242,7 @@ DownloadVideo () {
                 downloadFailed=true
             fi
         else
-            if [ ! -z "$cookiesFile" ]; then
-                yt-dlp --format-sort ext:mp4:m4a --merge-output-format mp4 --no-video-multistreams --cookies "$cookiesFile" -o "$videoDownloadPath/incomplete/${2}${3}" --embed-subs --sub-lang $youtubeSubtitleLanguage --no-mtime --geo-bypass "$1"
-            else
-                yt-dlp --format-sort ext:mp4:m4a --merge-output-format mp4 --no-video-multistreams -o "$videoDownloadPath/incomplete/${2}${3}" --embed-subs --sub-lang $youtubeSubtitleLanguage --no-mtime --geo-bypass "$1"
-            fi
+            yt-dlp --format-sort ext:mp4:m4a --merge-output-format mp4 --no-video-multistreams -o "$videoDownloadPath/incomplete/${2}${3}" $ytdlpConfigurableArgs --embed-subs --sub-lang $youtubeSubtitleLanguage --no-mtime --geo-bypass "$1"
             if [ -f "$videoDownloadPath/incomplete/${2}${3}.mp4" ]; then
                 chmod 666 "$videoDownloadPath/incomplete/${2}${3}.mp4"
                 downloadFailed=false
@@ -679,6 +683,8 @@ VideoProcess () {
                   fi 
   
                   mv $videoDownloadPath/incomplete/* "$videoPath/$lidarrArtistFolderNoDisambig"/
+		  # clean/clear download folder
+   		  rm -rf "$videoDownloadPath"/incomplete/*
               done
   
           fi

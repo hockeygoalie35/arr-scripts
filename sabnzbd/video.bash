@@ -1,5 +1,5 @@
-#!/usr/bin/with-contenv bash
-scriptVersion="1.0.5"
+#!/bin/bash
+scriptVersion="1.4"
 scriptName="Video"
 
 #### Import Settings
@@ -24,6 +24,7 @@ exec &> >(tee -a "/config/scripts/video.txt")
 function Configuration {
 	log "SABnzbd Job: $jobname"
 	log "SABnzbd Category: $category"
+    log "SABnzbd Download ID: $downloadId"
 	log "Script Versiion: $scriptVersion"
 	log "CONFIGURATION VERIFICATION"
 	log "##########################"
@@ -121,6 +122,23 @@ VideoFileCheck () {
 	fi
 }
 
+ArrWaitForTaskCompletion () {
+  alerted=no
+  until false
+  do
+    taskCount=$(curl -s "$arrUrl/api/v3/command?apikey=${arrApiKey}" | jq -r '.[] | select(.status=="started") | .name' | wc -l)
+	if [ "$taskCount" -ge "1" ]; then
+	  if [ "$alerted" == "no" ]; then
+		alerted=yes
+		log "$count of $fileCount :: STATUS :: ARR APP BUSY :: Pausing/waiting for all active Arr app tasks to end..."
+	  fi
+	  sleep 2
+	else
+	  break
+	fi
+  done
+}
+
 VideoSmaProcess (){
 	count=0
 	fileCount=$(find "$1" -type f -regex ".*/.*\.\(m4v\|wmv\|mkv\|mp4\|avi\)" | wc -l)
@@ -137,9 +155,61 @@ VideoSmaProcess (){
 			fi
 			log "$count of $fileCount :: Processing with SMA..."
 			if [ -f "/config/scripts/sma.ini" ]; then
+				if [ ${enableSmaTagging} = true ]; then
+				arrItemId=""
+				arrItemData=""
+				arrUrl=""
+				arrApiKey=""
+				log "$count of $fileCount :: Getting Media ID"
+				if echo $category | grep radarr | read; then
+				    if echo $category | grep radarr4k | read; then
+					  arrUrl="$radarr4kArrUrl"
+					  arrApiKey="$radarr4kArrApiKey"
+					else
+					  arrUrl="$radarrArrUrl"
+					  arrApiKey="$radarrArrApiKey"
+					fi
+					log "$count of $fileCount :: Refreshing Radarr app Queue"
+     				refreshQueue=$(curl -s "$arrUrl/api/v3/command" -X POST -H 'Content-Type: application/json' -H "X-Api-Key: $arrApiKey" --data-raw '{"name":"RefreshMonitoredDownloads"}')
+					ArrWaitForTaskCompletion
+					arrItemId=$(curl -s "$arrUrl/api/v3/queue?page=1&pageSize=50&sortDirection=ascending&sortKey=timeleft&includeUnknownMovieItems=true&apikey=$arrApiKey" | jq -r --arg id "$downloadId" '.records[] | select(.downloadId==$id) | .movieId')
+					arrItemData=$(curl -s "$arrUrl/api/v3/movie/$arrItemId?apikey=$arrApiKey")
+					onlineSourceId="$(echo "$arrItemData" | jq -r ".tmdbId")"
+					log "$count of $fileCount :: Radarr Movie ID = $arrItemId"
+					log "$count of $fileCount :: TMDB ID = $onlineSourceId"
+					onlineData="-tmdb $onlineSourceId"
+				fi
+				if echo $category | grep sonarr | read; then
+				    if echo $category | grep sonarr4k | read; then
+					  arrUrl="$sonarr4kArrUrl"
+					  arrApiKey="$sonarr4kArrApiKey"
+					else
+					  arrUrl="$sonarrArrUrl"
+					  arrApiKey="$sonarrArrApiKey"
+					fi
+					log "$count of $fileCount :: Refreshing Sonarr app Queue"
+					refreshQueue=$(curl -s "$arrUrl/api/v3/command" -X POST -H 'Content-Type: application/json' -H "X-Api-Key: $arrApiKey" --data-raw '{"name":"RefreshMonitoredDownloads"}')
+					ArrWaitForTaskCompletion
+					arrQueueItemData=$(curl -s "$arrUrl/api/v3/queue?page=1&pageSize=50&sortDirection=ascending&sortKey=timeleft&includeUnknownSeriesItems=true&apikey=$arrApiKey" | jq -r --arg id "$downloadId" '.records[] | select(.downloadId==$id)')
+					arrSeriesId="$(echo $arrQueueItemData | jq -r .seriesId)"
+					arrEpisodeId="$(echo $arrQueueItemData | jq -r .episodeId)"
+					arrSeriesData=$(curl -s "$arrUrl/api/v3/series/$arrSeriesId?apikey=$arrApiKey")
+					arrEpisodeData=$(curl -s "$arrUrl/api/v3/episode/$arrEpisodeId?apikey=$arrApiKey")
+					onlineSourceId="$(echo "$arrSeriesData" | jq -r ".tvdbId")"
+					seasonNumber="$(echo "$arrEpisodeData" | jq -r ".seasonNumber")"
+					episodeNumber="$(echo "$arrEpisodeData" | jq -r ".episodeNumber")"
+					log "$count of $fileCount :: Sonarr Show ID = $arrSeriesId"
+					log "$count of $fileCount :: TVDB ID = $onlineSourceId"
+					onlineSource="-tvdb"
+					onlineData="-tvdb $onlineSourceId -s $seasonNumber -e $episodeNumber"
+				fi
+			else
+			  onlineSourceId=""
+			  onlineData=""
+			fi
 			
 			# Manual run of Sickbeard MP4 Automator
-				if python3 /config/scripts/sma/manual.py --config "/config/scripts/sma.ini" -i "$file" $tagging; then
+				if python3 /config/scripts/sma/manual.py --config "/config/scripts/sma.ini" -i "$file" $tagging $onlineData; then
 					log "$count of $fileCount :: Complete!"
 				else
 					log "$count of $fileCount :: ERROR :: SMA Processing Error"
@@ -162,7 +232,25 @@ function Main {
 	jobname="$3"
 	category="$5"
 	smaProcessComplete="false"
-	
+	downloadId="$SAB_NZO_ID"
+
+	if [ "$category"  == "radarr" ]; then
+	  arrUrl="$radarrArrUrl"
+      arrApiKey="$radarrArrApiKey"
+    fi
+	if [ "$category"  == "radarr4k" ]; then
+	  arrUrl="$radarr4kArrUrl"
+      arrApiKey="$radarr4kArrApiKey"
+    fi
+	if [ "$category"  == "sonarr" ]; then
+	  arrUrl="$sonarrArrUrl"
+      arrApiKey="$sonarrArrApiKey"
+    fi
+	if [ "$category"  == "sonarr4k" ]; then
+	  arrUrl="$sonarr4kArrUrl"
+      arrApiKey="$sonarr4kArrApiKey"
+    fi
+
 	Configuration
 	VideoFileCheck "$folderpath"
 	VideoLanguageCheck "$folderpath"

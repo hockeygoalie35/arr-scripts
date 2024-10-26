@@ -27,6 +27,9 @@ InstallRequirements () {
     rm -rf /config/scripts/sma
   fi
   echo "************ setup SMA ************"
+  if [ -d "${SMA_PATH}"  ]; then
+    rm -rf "${SMA_PATH}"
+  fi
   echo "************ setup directory ************"
   mkdir -p /config/scripts/sma
   echo "************ download repo ************"

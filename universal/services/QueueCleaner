@@ -1,5 +1,5 @@
 #!/usr/bin/with-contenv bash
-scriptVersion="1.7"
+scriptVersion="1.9"
 scriptName="QueueCleaner"
 
 #### Import Settings
@@ -28,40 +28,56 @@ verifyConfig () {
 }
 
 QueueCleanerProcess () {
+  arrQueueData=""
+  arrApp=""
+
   # Sonarr
-  if [ "$arrPort" == "8989" ]; then
+  if [ -z "$arrQueueData" ]; then
     arrQueueData="$(curl -s "$arrUrl/api/v3/queue?page=1&pagesize=200&sortDirection=descending&sortKey=progress&includeUnknownSeriesItems=true&apikey=${arrApiKey}" | jq -r .records[])"
+    arrApp="sonarr"
   fi
 
   # Radarr
-  if [ "$arrPort" == "7878" ]; then
-     arrQueueData="$(curl -s "$arrUrl/api/v3/queue?page=1&pagesize=200&sortDirection=descending&sortKey=progress&includeUnknownMovieItems=true&apikey=${arrApiKey}" | jq -r .records[])"
+  if [ -z "$arrQueueData" ]; then
+    arrQueueData="$(curl -s "$arrUrl/api/v3/queue?page=1&pagesize=200&sortDirection=descending&sortKey=progress&includeUnknownMovieItems=true&apikey=${arrApiKey}" | jq -r .records[])"
+    arrApp="radarr"
   fi
 
   # Lidarr
-  if [ "$arrPort" == "8686" ]; then
+  if [ -z "$arrQueueData" ]; then
     arrQueueData="$(curl -s "$arrUrl/api/v1/queue?page=1&pagesize=200&sortDirection=descending&sortKey=progress&includeUnknownArtistItems=true&apikey=${arrApiKey}" | jq -r .records[])"
+    arrApp="lidarr"
   fi
   
   # Readarr
-  if [ "$arrPort" == "8787" ]; then
+  if [ -z "$arrQueueData" ]; then
     arrQueueData="$(curl -s "$arrUrl/api/v1/queue?page=1&pagesize=200&sortDirection=descending&sortKey=progress&includeUnknownAuthorItems=true&apikey=${arrApiKey}" | jq -r .records[])"
+    arrApp="readarr"
   fi
-  
+
+  arrQueueIdCount=$(echo "$arrQueueData" | jq -r ".id" | wc -l)
   arrQueueCompletedIds=$(echo "$arrQueueData" | jq -r 'select(.status=="completed") | select(.trackedDownloadStatus=="warning") | .id')
-  arrQueueIdsCompletedCount=$(echo "$arrQueueData" | jq -r 'select(.status=="completed") | select(.trackedDownloadStatus=="warning") | .id' | wc -l)
+  arrQueueIdsCompletedCount=$(echo -n "$arrQueueCompletedIds" | wc -l)
   arrQueueFailedIds=$(echo "$arrQueueData" | jq -r 'select(.status=="failed") | .id')
-  arrQueueIdsFailedCount=$(echo "$arrQueueData" | jq -r 'select(.status=="failed") | .id' | wc -l)
-  arrQueuedIds=$(echo "$arrQueueCompletedIds"; echo "$arrQueueFailedIds")
-  arrQueueIdsCount=$(( $arrQueueIdsCompletedCount + $arrQueueIdsFailedCount ))
+  arrQueueIdsFailedCount=$(echo -n "$arrQueueFailedIds" | wc -l)
+  arrQueueStalledIds=$(echo "$arrQueueData" | jq -r 'select(.status=="stalled") | .id')
+  arrQueueIdsStalledount=$(echo -n "$arrQueueStalledIds" | wc -l)
+  arrQueuedIds=$(echo "$arrQueueCompletedIds"; echo "$arrQueueFailedIds"; echo "$arrQueueStalledIds")
+  arrQueueIdsCount=$(( $arrQueueIdsCompletedCount + $arrQueueIdsFailedCount + $arrQueueIdsStalledount ))
+
+  # Debugging
+  #echo "$arrQueueIdsCount :: $arrQueueIdsCompletedCount + $arrQueueIdsFailedCount + $arrQueueIdsStalledount"
+  #echo "$arrQueueCompletedIds"
+  #echo "$arrQueueFailedIds"
+  #echo "$arrQueueStalledIds"
 
   if [ $arrQueueIdsCount -eq 0 ]; then
-    log "No items in queue to clean up"
+    log "$arrQueueIdCount items in queue, no items in queue to clean up"
   else
     for queueId in $(echo $arrQueuedIds); do
       arrQueueItemData="$(echo "$arrQueueData" | jq -r "select(.id==$queueId)")"
       arrQueueItemTitle="$(echo "$arrQueueItemData" | jq -r .title)"
-      if [ "$arrPort" == "8989" ]; then
+      if [ "$arrApp" == "sonarr" ]; then
         arrEpisodeId="$(echo "$arrQueueItemData" | jq -r .episodeId)"
         arrEpisodeData="$(curl -s "$arrUrl/api/v3/episode/$arrEpisodeId?apikey=${arrApiKey}")"
         arrEpisodeTitle="$(echo "$arrEpisodeData" | jq -r .title)"

@@ -16,10 +16,13 @@ apk add -U --update --no-cache \
   ffmpeg && \
 echo "************ install python packages ************" && \
 pip install --upgrade --no-cache-dir -U  --break-system-packages \
-		excludarr \
-                yt-dlp \
-		yq && \
-echo "************ setup SMA ************" && \
+  excludarr \
+  yt-dlp \
+  yq && \
+echo "************ setup SMA ************"
+if [ -d "${SMA_PATH}"  ]; then
+  rm -rf "${SMA_PATH}"
+fi
 echo "************ setup directory ************" && \
 mkdir -p ${SMA_PATH} && \
 echo "************ download repo ************" && \
@@ -35,10 +38,19 @@ python3 -m pip install --break-system-packages --upgrade pip && \
 pip3 install --break-system-packages -r ${SMA_PATH}/setup/requirements.txt && \
 echo "************ install recyclarr ************" && \
 mkdir -p /recyclarr && \
-wget "https://github.com/recyclarr/recyclarr/releases/latest/download/recyclarr-linux-musl-x64.tar.xz" -O "/recyclarr/recyclarr.tar.xz" && \
+# Get the hardware architecture
+architecture=$(uname -m)
+if [[ "$architecture" == arm* ]] then
+  recyclarr_url="https://github.com/recyclarr/recyclarr/releases/latest/download/recyclarr-linux-musl-arm.tar.xz"
+elif [[ "$architecture" == "aarch64" ]]; then
+  recyclarr_url="https://github.com/recyclarr/recyclarr/releases/latest/download/recyclarr-linux-musl-arm64.tar.xz"
+else
+  recyclarr_url="https://github.com/recyclarr/recyclarr/releases/latest/download/recyclarr-linux-musl-x64.tar.xz"
+fi
+wget "$recyclarr_url" -O "/recyclarr/recyclarr.tar.xz" && \
 tar -xf /recyclarr/recyclarr.tar.xz -C /recyclarr &>/dev/null && \
 chmod 777 /recyclarr/recyclarr
-apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community dotnet7-runtime
+apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community dotnet8-runtime
 
 mkdir -p /custom-services.d
 echo "Download QueueCleaner service..."

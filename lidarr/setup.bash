@@ -24,7 +24,8 @@ apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing atomicpa
 npm install -g miraclx/freyr-js &&\
 echo "*** install python packages ***" && \
 pip install --upgrade --no-cache-dir --break-system-packages \
-  jellyfish==0.10 \
+  jellyfish \
+  beautifulsoup4 \
   yt-dlp \
   beets \
   yq \
@@ -38,7 +39,10 @@ pip install --upgrade --no-cache-dir --break-system-packages \
   r128gain \
   tidal-dl \
   deemix && \
-echo "************ setup SMA ************" && \
+echo "************ setup SMA ************"
+if [ -d "${SMA_PATH}"  ]; then
+  rm -rf "${SMA_PATH}"
+fi
 echo "************ setup directory ************" && \
 mkdir -p ${SMA_PATH} && \
 echo "************ download repo ************" && \
@@ -117,13 +121,17 @@ if [ ! -f /config/extended/beets-config-lidarr.yaml ]; then
 	echo "Done"
 fi
 
-echo "Download Deemix config..."
-curl "https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/deemix_config.json" -o /config/extended/deemix_config.json
-echo "Done"
+if [ ! -f /config/extended/deemix_config.json ]; then
+  echo "Download Deemix config..."
+  curl "https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/deemix_config.json" -o /config/extended/deemix_config.json
+  echo "Done"
+fi
 
-echo "Download Tidal config..."
-curl "https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/tidal-dl.json" -o /config/extended/tidal-dl.json
-echo "Done"
+if [ ! -f /config/extended/tidal-dl.json ]; then
+  echo "Download Tidal config..."
+  curl "https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/tidal-dl.json" -o /config/extended/tidal-dl.json
+  echo "Done"
+fi
 
 echo "Download LyricExtractor script..."
 curl https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/LyricExtractor.bash -o /config/extended/LyricExtractor.bash

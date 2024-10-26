@@ -90,6 +90,7 @@ echo "Done"
 mkdir -p /custom-services.d/python
 echo "Download ARLChecker service..."
 curl https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/python/ARLChecker.py -o /custom-services.d/python/ARLChecker.py
+curl https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/python/prettylogging.py -o /custom-services.d/python/prettylogging.py
 curl https://raw.githubusercontent.com/RandomNinjaAtk/arr-scripts/main/lidarr/ARLChecker -o /custom-services.d/ARLChecker
 
 

@@ -8,6 +8,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 import logging
 import os
+from colorama import Fore
 from datetime import datetime
 import prettylogging
 
@@ -25,7 +26,6 @@ USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 
 
 log_settings = prettylogging.Prettylogger(logger_name='ARLChecker')
 log = log_settings.logger
-log.debug('Logger initialized')
 
 
 @dataclass
@@ -360,7 +360,7 @@ def pushover_notify(api_token, user_key, message):  # Send Notification to Pusho
         "message": message
     })
     if response.json()['status'] == 1:
-        log.info("Pushover notification sent successfully")
+        log.success("Pushover notification sent successfully")
     else:
         for message_error in response.json()['errors']:
             log.error(f"Pushover Response: {message_error}")
@@ -373,7 +373,7 @@ def ntfy_notify(server_plus_topic, message, token):  # Send Notification to ntfy
                       data=message.encode(encoding='utf-8'),
                       headers={"Authorization":  f"Bearer {token}"}
                       )
-        log.info( 'ntfy notification sent successfully' )
+        log.success( 'ntfy notification sent successfully' )
     except Exception as e:
         if "Failed to resolve" in str(e):
             log.error( "ntfy ERROR: Check if server and user token correct in extended.conf")
@@ -388,14 +388,14 @@ def check_token(token=None):
         deezer_check = DeezerPlatformProvider()
         account = deezer_check.login('', token.replace('"', ''))
         if account.plan:
-            log.info( f'Deezer Account Found.' )
+            log.success( f'Deezer Account Found.' )
             log.info('-------------------------------')
             log.info(f'Plan: {account.plan.name}')
             log.info(f'Expiration: {account.plan.expires}')
-            log.info(f'Active: {"Y" if account.plan.active else "N"}')
-            log.info(f'Download: {"Y" if account.plan.download else "N"}')
-            log.info(f'Lossless: {"Y" if account.plan.lossless else "N"}')
-            log.info(f'Explicit: {"Y" if account.plan.explicit else "N"}')
+            log.info(f'Active: {Fore.GREEN+"Y"+Fore.RESET if account.plan.active else Fore.RED+"N"+Fore.RESET}')
+            log.info(f'Download: {Fore.GREEN+"Y"+Fore.RESET if account.plan.download else Fore.RED+"N"+Fore.RESET}')
+            log.info(f'Lossless: {Fore.GREEN+"Y"+Fore.RESET if account.plan.lossless else Fore.RED+"N"+Fore.RESET}')
+            log.info(f'Explicit: {Fore.GREEN+"Y"+Fore.RESET if account.plan.explicit else Fore.RED+"N"+Fore.RESET}')
             log.info('-------------------------------')
             return True
     except Exception as e:

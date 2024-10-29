@@ -136,6 +136,7 @@ class LidarrExtendedAPI:
         self.pushover_user_key = None
         self.pushover_app_api_key = None
         self.enable_ntfy_notify = False
+        self.enable_ntfy_bot = False
         self.ntfy_sever_topic = None
         self.ntfy_user_token = None
 
@@ -189,6 +190,10 @@ class LidarrExtendedAPI:
                 self.pushover_app_api_key = re.search(re_search_pattern, line)[0].replace('"', '')
             if 'ntfyEnable=' in line:
                 self.enable_ntfy_notify = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true'
+            if 'ntfyBotEnable=' in line:
+                if self.enable_telegram_bot is not True:  # doesn't allow multiple bots at the same time
+                    self.enable_ntfy_bot = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true'
+                    self.enable_ntfy_notify = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true' #Just in case user sets notify to false for some reason.
             if 'ntfyServerTopic=' in line:
                 self.ntfy_sever_topic = re.search(re_search_pattern, line)[0].replace('"', '')
             if 'ntfyUserToken=' in line:

@@ -22,6 +22,9 @@ NOT_FOUND_PATH = '/config/extended/logs/notfound'
 FAILED_DOWNLOADS_PATH = '/config/extended/logs/downloaded/failed/deezer'
 LOG_FILES_DIRECTORY = '/config/logs'
 DEBUG_ROOT_PATH = './env'
+EXPIRE_MESSAGE = ('---\U0001F6A8WARNING\U0001F6A8-----\nARL TOKEN EXPIRED\n Update arlToken in extended.conf\n'
+                  'You can find a new ARL at:\nhttps://rentry.org/firehawk52#deezer-arls')
+EXPIRE_COMMANDS = '\n\n\n Other Commands:\n/cancel - Cancel this session\n/disable - Disable Bot'
 
 # Web agent used to access Deezer
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/110.0'
@@ -135,10 +138,11 @@ class LidarrExtendedAPI:
         self.enable_pushover_notify = False
         self.pushover_user_key = None
         self.pushover_app_api_key = None
-        self.enable_ntfy_notify = False
         self.enable_ntfy_bot = False
         self.ntfy_sever_topic = None
         self.ntfy_user_token = None
+        self.ntfy_bot_enable_line_text = None
+        self.ntfy_bot_enable_line_index = None
 
     def parse_extended_conf(self):
         self.currentARLToken = None
@@ -171,7 +175,7 @@ class LidarrExtendedAPI:
             file.close()
             exit(1)
         self.currentARLToken = arl_token_match[0]
-        log.info('ARL Found in extended.conf')
+        log.success('ARL Found in extended.conf')
 
         for line in self.fileText:
             if 'telegramBotEnable=' in line:
@@ -189,19 +193,18 @@ class LidarrExtendedAPI:
             if 'pushoverAppAPIKey=' in line:
                 self.pushover_app_api_key = re.search(re_search_pattern, line)[0].replace('"', '')
             if 'ntfyEnable=' in line:
-                self.enable_ntfy_notify = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true'
-            if 'ntfyBotEnable=' in line:
                 if self.enable_telegram_bot is not True:  # doesn't allow multiple bots at the same time
                     self.enable_ntfy_bot = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true'
-                    self.enable_ntfy_notify = re.search(re_search_pattern, line)[0].replace('"', '').lower() in 'true' #Just in case user sets notify to false for some reason.
+                    self.ntfy_bot_enable_line_text = line
+                    self.ntfy_bot_enable_line_index = self.fileText.index(self.ntfy_bot_enable_line_text)
             if 'ntfyServerTopic=' in line:
                 self.ntfy_sever_topic = re.search(re_search_pattern, line)[0].replace('"', '')
             if 'ntfyUserToken=' in line:
                 self.ntfy_user_token = re.search(re_search_pattern, line)[0].replace('"', '')
 
         if self.enable_telegram_bot:
-            log.info('Telegram bot is enabled.')
-            if self.telegram_bot_token is None or self.telegram_user_chat_id is None:
+            log.success('Telegram bot is enabled.')
+            if self.telegram_bot_token is None or self.telegram_user_chat_id is None or self.telegram_bot_token == '' or self.telegram_user_chat_id == '':
                 log.error('Telegram bot token or user chat ID not set in extended.conf. Exiting')
                 exit(1)
         else:
@@ -209,13 +212,17 @@ class LidarrExtendedAPI:
 
         # Report Notify/Bot Enable
         if self.enable_pushover_notify:
-            log.info('Pushover notify is enabled.')
+            log.success('Pushover notify is enabled.')
         else:
             log.info('Pushover notify is disabled.')
-        if self.enable_ntfy_notify:
-            log.info('ntfy notify is enabled.')
+        if self.enable_ntfy_bot:
+            log.success('ntfy bot is enabled.')
+            if self.ntfy_user_token is None or self.ntfy_sever_topic is None or self.ntfy_user_token == '' or self.ntfy_sever_topic == '':
+                log.error('NTFY user token or topic not set in extended.conf. Exiting')
+                exit(1)
         else:
-            log.info('ntfy notify is disabled.')
+            log.info('ntfy bot is disabled.')
+
 
     def check_token_wrapper(self):  # adds Lidarr_extended specific logging and actions around check_token
         log.info("Checking ARL Token from extended.conf")
@@ -235,9 +242,10 @@ class LidarrExtendedAPI:
             if self.telegram_bot_running:  # Don't re-start the telegram bot if it's already running after bot invalid token entry
                 return False
             if self.enable_pushover_notify:
-                pushover_notify(self.pushover_app_api_key, self.pushover_user_key, '---\U0001F6A8WARNING\U0001F6A8-----\nARL TOKEN EXPIRED\n Update arlToken in extended.conf"\n You can find a new ARL at:\nhttps://rentry.org/firehawk52#deezer-arls')
-            if self.enable_ntfy_notify:
-                ntfy_notify(self.ntfy_sever_topic, '---\U0001F6A8WARNING\U0001F6A8-----\nARL TOKEN EXPIRED\n Update arlToken in extended.conf\n You can find a new ARL at:\nhttps://rentry.org/firehawk52#deezer-arls', self.ntfy_user_token)
+                pushover_notify(self.pushover_app_api_key, self.pushover_user_key, EXPIRE_MESSAGE)
+            if self.enable_ntfy_bot:
+                log.info(f'Starting ntfy bot...Check {self.ntfy_sever_topic} and follow instructions.')
+                self.start_ntfy_bot()
             if self.enable_telegram_bot:
                 log.info( 'Starting Telegram bot...Check Telegram and follow instructions.' )
                 self.telegram_bot_running = True
@@ -286,6 +294,17 @@ class LidarrExtendedAPI:
             file.close()
         log.info("Telegram Bot Disabled.")
 
+    def start_ntfy_bot(self):
+        ntfy_bot = NtfyBot(parent=self, server_plus_topic=self.ntfy_sever_topic, token=self.ntfy_user_token)
+        ntfy_bot.ntfy_notify(EXPIRE_MESSAGE + EXPIRE_COMMANDS, expect_response=True)
+
+    def disable_ntfy_bot(self):
+        compiled = re.compile(re.escape('true'), re.IGNORECASE)
+        self.fileText[self.ntfy_bot_enable_line_index] = compiled.sub('false', self.ntfy_bot_enable_line_text)
+        with open(self.root+EXTENDED_CONF_PATH, 'w', encoding='utf-8') as file:
+            file.writelines(self.fileText)
+            file.close()
+        log.info("ntfy Bot Disabled.")
 
 class TelegramBot:
     def __init__(self, parent, telegram_bot_token, telegram_user_chat_id):
@@ -295,7 +314,7 @@ class TelegramBot:
 
         # Send initial notification
         async def send_expired_token_notification(application):
-            await application.bot.sendMessage(chat_id=self.telegram_chat_id, text='---\U0001F6A8WARNING\U0001F6A8-----\nARL TOKEN EXPIRED\n Update Token by running "/set_token <TOKEN>"\n You can find a new ARL at:\nhttps://rentry.org/firehawk52#deezer-arls\n\n\n Other Commands:\n/cancel - Cancel this session\n/disable - Disable Telegram Bot', disable_web_page_preview=True)
+            await application.bot.sendMessage(chat_id=self.telegram_chat_id, text=EXPIRE_MESSAGE+EXPIRE_COMMANDS, disable_web_page_preview=True)
             log.info( "Telegram Bot Sent ARL Token Expiry Message " )
             # TODO: Get Chat ID/ test on new bot
 
@@ -359,15 +378,15 @@ class TelegramBot:
             return
 
 class NtfyBot:
-    def __init__(self, server_plus_topic, token, poll_interval=3):
+    def __init__(self,parent, server_plus_topic, token, poll_interval=3):
+        self.parent = parent
         self.server_plus_topic = server_plus_topic
         self.token = token
-        self.command_dict = {"/set_token":self.set_token,"/cancel":self.cancel, "/disable_bot":self.disable_bot}
+        self.command_dict = {"/set_token":self.set_token,"/cancel":self.cancel, "/disable":self.disable_bot}
         self.poll_interval = poll_interval
 
     def ntfy_notify(self, message, expect_response=False):  # Send Notification to ntfy topic
         log.info('Attempting ntfy notification')
-        # log.info(message)
         try:
             response = requests.post(self.server_plus_topic,
                                      data=message.encode(encoding='utf-8'),
@@ -382,7 +401,8 @@ class NtfyBot:
                 log.error("ntfy ERROR: Check if server address is correct")
             elif response.content:
                 log.error(
-                    f'Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+                    f'NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+                log.error('Is server topic set correctly? Is ntfy token correct?')
             else:
                 log.error("NTFY ERROR: " + str(e))
             exit(1)
@@ -391,7 +411,7 @@ class NtfyBot:
             self.ntfy_listen_for_response()
 
     def ntfy_listen_for_response(self):
-        log.debug('Waiting for response...')
+        log.info('ntfy bot: Waiting for response...')
         response = None
         while not response:
             sleep(self.poll_interval)
@@ -402,26 +422,32 @@ class NtfyBot:
                     log.debug(line.decode('utf-8'))
                     response = json.loads(line.decode('utf-8'))['message']
             if response:
-                log.debug(f'user response: {response}')
+                log.info(f'user response: {response}')
                 self.ntfy_parse_user_response(response)
-            log.debug(f'No valid message received, sleeping for {self.poll_interval} seconds')
+                break
+            log.debug(f'ntfy bot: No valid message received, sleeping for {self.poll_interval} seconds')
 
     def ntfy_parse_user_response(self,user_response):
         for command in self.command_dict:
             if command in user_response:
                 self.command_dict[command]()
                 return
-        log.error("Invalid Command, Try Again.")
+        self.ntfy_notify('Invalid Command, Try Again.')
+        log.error("ntfy Bot - Invalid Command, Try Again.")
         self.ntfy_listen_for_response()
 
     def cancel(self):
-        pass
+        self.ntfy_notify('Canceling...ARLToken is still expired.')
+        log.info('ntfy Bot - Canceling...ARLToken is still expired.')
 
     def set_token(self):
         pass
+        # TODO: This
 
     def disable_bot(self):
-        pass
+        log.info('ntfy Bot: Send Disable Bot Message :(')
+        self.ntfy_notify('Disabled ntfy Bot. \U0001F614\nIf you would like to re-enable,\nset nftyEnable to true\nin extended.conf')
+        self.parent.disable_ntfy_bot()
 
 
 def pushover_notify(api_token, user_key, message):  # Send Notification to Pushover
@@ -436,21 +462,6 @@ def pushover_notify(api_token, user_key, message):  # Send Notification to Pusho
     else:
         for message_error in response.json()['errors']:
             log.error(f"Pushover Response: {message_error}")
-
-
-def ntfy_notify(server_plus_topic, message, token):  # Send Notification to ntfy topic
-    log.info( 'Attempting ntfy notification' )
-    try:
-        response=requests.post(server_plus_topic,
-                      data=message.encode(encoding='utf-8'),
-                      headers={"Authorization":  f"Bearer {token}"}
-                      )
-        log.success( 'ntfy notification sent successfully' )
-    except Exception as e:
-        if "Failed to resolve" in str(e):
-            log.error( "ntfy ERROR: Check if server and user token correct in extended.conf")
-        else:
-            log.error( "NTFY ERROR: "+str(e))
 
 
 def check_token(token=None):

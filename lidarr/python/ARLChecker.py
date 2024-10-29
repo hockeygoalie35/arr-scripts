@@ -1,4 +1,6 @@
 import re
+from time import sleep
+import json
 import requests
 from dataclasses import dataclass
 from requests import Session
@@ -261,7 +263,7 @@ class LidarrExtendedAPI:
 
     def start_telegram_bot(self):
         try:
-            self.bot = TelegramBotControl(self, self.telegram_bot_token, self.telegram_user_chat_id)
+            self.bot = TelegramBot(self, self.telegram_bot_token, self.telegram_user_chat_id)
         except Exception as e:
             if 'Chat not found' in str(e) or 'Chat_id' in str(e):
                 log.error(
@@ -280,7 +282,7 @@ class LidarrExtendedAPI:
         log.info("Telegram Bot Disabled.")
 
 
-class TelegramBotControl:
+class TelegramBot:
     def __init__(self, parent, telegram_bot_token, telegram_user_chat_id):
         self.parent = parent
         self.telegram_bot_token = telegram_bot_token
@@ -351,6 +353,71 @@ class TelegramBotControl:
             await send_message("Token expired or invalid. Try another token.", reply=True)
             return
 
+class NtfyBot:
+    def __init__(self, server_plus_topic, token, poll_interval=3):
+        self.server_plus_topic = server_plus_topic
+        self.token = token
+        self.command_dict = {"/set_token":self.set_token,"/cancel":self.cancel, "/disable_bot":self.disable_bot}
+        self.poll_interval = poll_interval
+
+    def ntfy_notify(self, message, expect_response=False):  # Send Notification to ntfy topic
+        log.info('Attempting ntfy notification')
+        # log.info(message)
+        try:
+            response = requests.post(self.server_plus_topic,
+                                     data=message.encode(encoding='utf-8'),
+                                     headers={"Authorization": f"Bearer {self.token}"}
+                                     )
+            if 'http' in json.loads(response.content).keys():
+                raise Exception('ntfy notification failed')
+            elif 'message' in json.loads(response.content).keys():
+                log.success('ntfy notification sent successfully')
+        except Exception as e:
+            if "Failed to resolve" in str(e):
+                log.error("ntfy ERROR: Check if server address is correct")
+            elif response.content:
+                log.error(
+                    f'Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+            else:
+                log.error("NTFY ERROR: " + str(e))
+            exit(1)
+        if expect_response is True:
+            sleep(1)
+            self.ntfy_listen_for_response()
+
+    def ntfy_listen_for_response(self):
+        log.debug('Waiting for response...')
+        response = None
+        while not response:
+            sleep(self.poll_interval)
+            r = requests.get(f'{self.server_plus_topic}/json?poll=1&since={self.poll_interval}s',
+                             headers={"Authorization": f"Bearer {self.token}"})
+            for line in r.iter_lines():
+                if line:
+                    log.debug(line.decode('utf-8'))
+                    response = json.loads(line.decode('utf-8'))['message']
+            if response:
+                log.debug(f'user response: {response}')
+                self.ntfy_parse_user_response(response)
+            log.debug(f'No valid message received, sleeping for {self.poll_interval} seconds')
+
+    def ntfy_parse_user_response(self,user_response):
+        for command in self.command_dict:
+            if command in user_response:
+                self.command_dict[command]()
+                return
+        log.error("Invalid Command, Try Again.")
+        self.ntfy_listen_for_response()
+
+    def cancel(self):
+        pass
+
+    def set_token(self):
+        pass
+
+    def disable_bot(self):
+        pass
+
 
 def pushover_notify(api_token, user_key, message):  # Send Notification to Pushover
     log.info( 'Attempting Pushover notification' )
@@ -369,7 +436,7 @@ def pushover_notify(api_token, user_key, message):  # Send Notification to Pusho
 def ntfy_notify(server_plus_topic, message, token):  # Send Notification to ntfy topic
     log.info( 'Attempting ntfy notification' )
     try:
-        requests.post(server_plus_topic,
+        response=requests.post(server_plus_topic,
                       data=message.encode(encoding='utf-8'),
                       headers={"Authorization":  f"Bearer {token}"}
                       )

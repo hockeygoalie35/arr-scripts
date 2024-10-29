@@ -1,6 +1,6 @@
 #!/usr/bin/with-contenv bash
 ### Default values
-scriptVersion="3.1"
+scriptVersion="4.0 dev"
 scriptName="ARLChecker"
 sleepInterval='24h'
 ### Import Settings

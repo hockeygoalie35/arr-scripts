@@ -1,4 +1,5 @@
 import re
+import time
 from time import sleep
 import json
 import requests
@@ -66,7 +67,7 @@ class ServiceError(Exception):
 class DeezerPlatformProvider:
     NAME = 'Deezer'
 
-    BASE_URL = 'http://www.deezer.com'
+    BASE_URL = 'https://www.deezer.com'
     API_PATH = '/ajax/gw-light.php'
     SESSION_DATA = {
         'api_token': 'null',
@@ -88,7 +89,7 @@ class DeezerPlatformProvider:
                 data=self.SESSION_DATA
             )
             res.raise_for_status()
-        except Exception as error:
+        except Exception:
             log.error( 'Could not connect! Service down, API changed, wrong credentials or code-related issue.' )
             raise ConnectionError()
 
@@ -96,7 +97,7 @@ class DeezerPlatformProvider:
 
         try:
             res = res.json()
-        except Exception as error:
+        except Exception:
             log.error( "Could not parse JSON response from DEEZER!" )
             raise ParseError()
 
@@ -306,6 +307,7 @@ class LidarrExtendedAPI:
             file.close()
         log.info("ntfy Bot Disabled.")
 
+
 class TelegramBot:
     def __init__(self, parent, telegram_bot_token, telegram_user_chat_id):
         self.parent = parent
@@ -377,13 +379,15 @@ class TelegramBot:
             await send_message("Token expired or invalid. Try another token.", reply=True)
             return
 
+
 class NtfyBot:
-    def __init__(self,parent, server_plus_topic, token, poll_interval=3):
+    def __init__(self,parent, server_plus_topic, token, poll_interval=1):
         self.parent = parent
         self.server_plus_topic = server_plus_topic
         self.token = token
         self.command_dict = {"/set_token":self.set_token,"/cancel":self.cancel, "/disable":self.disable_bot}
         self.poll_interval = poll_interval
+        self.last_response = ''
 
     def ntfy_notify(self, message, expect_response=False):  # Send Notification to ntfy topic
         log.info('Attempting ntfy notification')
@@ -411,6 +415,7 @@ class NtfyBot:
             self.ntfy_listen_for_response()
 
     def ntfy_listen_for_response(self):
+        time.sleep(self.poll_interval) # Prevent cascading "Invalid Command"
         log.info('ntfy bot: Waiting for response...')
         response = None
         while not response:
@@ -419,8 +424,16 @@ class NtfyBot:
                              headers={"Authorization": f"Bearer {self.token}"})
             for line in r.iter_lines():
                 if line:
-                    log.debug(line.decode('utf-8'))
-                    response = json.loads(line.decode('utf-8'))['message']
+                    try:
+                        log.debug(line.decode('utf-8'))
+                        response = json.loads(line.decode('utf-8'))['message']
+                    except Exception as e:
+                        if json.loads(line.decode('utf-8'))['content']:
+                            log.error(f'NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+                            exit(1)
+                        else:
+                            print(e)
+                            exit(1)
             if response:
                 log.info(f'user response: {response}')
                 self.ntfy_parse_user_response(response)
@@ -430,6 +443,7 @@ class NtfyBot:
     def ntfy_parse_user_response(self,user_response):
         for command in self.command_dict:
             if command in user_response:
+                self.last_response = user_response
                 self.command_dict[command]()
                 return
         self.ntfy_notify('Invalid Command, Try Again.')
@@ -441,8 +455,32 @@ class NtfyBot:
         log.info('ntfy Bot - Canceling...ARLToken is still expired.')
 
     def set_token(self):
-        pass
-        # TODO: This
+        try:
+            new_token = self.last_response.split('/set_token ')[1]
+            if new_token == '':
+                raise Exception
+        except:
+            self.ntfy_notify('Invalid Entry, Try Again.')
+            log.error("ntfy Bot - Invalid Entry, Try Again.")
+            self.ntfy_listen_for_response()
+            return
+        log.info(f"ntfy Bot:Token received: {new_token}")
+        token_validity = check_token(new_token)
+        if token_validity:
+            self.ntfy_notify("ARL valid, applying...")
+            self.parent.newARLToken = '"' + new_token + '"'
+            self.parent.set_new_token()
+            self.ntfy_notify("Checking configuration...")
+            # reparse extended.conf
+            self.parent.parse_extended_conf()
+            token_validity = check_token(self.parent.currentARLToken)
+            if token_validity:
+                self.ntfy_notify("ARL Token Updated! \U0001F44D")
+        else:  # If Token invalid
+            self.ntfy_notify("Token expired or invalid. Try another token.")
+            log.info("ntfy BOT: Token expired or invalid. Try another token.")
+            self.ntfy_listen_for_response()
+
 
     def disable_bot(self):
         log.info('ntfy Bot: Send Disable Bot Message :(')

@@ -405,7 +405,7 @@ class NtfyBot:
                 log.error("ntfy ERROR: Check if server address is correct")
             elif response.content:
                 log.error(
-                    f'NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+                    f"NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}")
                 log.error('Is server topic set correctly? Is ntfy token correct?')
             else:
                 log.error("NTFY ERROR: " + str(e))
@@ -429,7 +429,7 @@ class NtfyBot:
                         response = json.loads(line.decode('utf-8'))['message']
                     except Exception as e:
                         if json.loads(line.decode('utf-8'))['content']:
-                            log.error(f'NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}')
+                            log.error(f"NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}")
                             exit(1)
                         else:
                             print(e)

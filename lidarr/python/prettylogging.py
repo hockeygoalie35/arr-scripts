@@ -1,14 +1,18 @@
 import logging
 from os import path, mkdir
-from datetime import datetime, timezone
-import time
-VERSION = 3.0 # Turn into class object to enable state updates
+from datetime import datetime
+
+VERSION = 4.0 # Add Success log level, remove info color flag
+
+# Add success log level to python logging
+logging.addLevelName(logging.WARNING - 5, 'SUCCESS')
+logging.SUCCESS = logging.WARNING - 5
 
 class WRONG_LOG_LEVEL(Exception):
     pass
 
 class PrettyLoggingFormatter(logging.Formatter):  # With the sparkle :D
-    def __init__(self, logger_name, version, info_color=None):
+    def __init__(self, logger_name, version):
         fore_colors = {
             'BLACK': '\033[0;30m',
             'LIGHT_BLACK': '\033[30;1m',
@@ -49,20 +53,18 @@ class PrettyLoggingFormatter(logging.Formatter):  # With the sparkle :D
             'LIGHT_WHITE': '\033[1;47m',
             'RESET': "\033[0m"
         }
-        if info_color is None:
-            info_color = fore_colors["RESET"]
-        else:
-            info_color = fore_colors[info_color]
 
-        format = f'%(asctime)s :: {logger_name} :: {version} :: %(levelname)s :: '
+
+        log_format = f'%(asctime)s :: {logger_name} :: {version} :: %(levelname)s :: '
         logging.Formatter.formatTime = self.format_time
         self.FORMATS = {
-            logging.DEBUG:  format + fore_colors['CYAN'] + '%(message)s' + fore_colors['RESET'],
-            logging.INFO: format + info_color + '%(message)s' + fore_colors['RESET'],
-            logging.WARNING:  format + fore_colors['YELLOW'] + '%(message)s' + fore_colors['RESET'],
-            logging.ERROR:  format + fore_colors['RED'] + '%(message)s' + fore_colors['RESET'],
-            logging.CRITICAL:  format + fore_colors['LIGHT_RED'] + '%(message)s' + fore_colors['RESET'],
-            logging.FATAL:  format + fore_colors['LIGHT_RED'] + back_colors['LIGHT_WHITE'] + '%(message)s' + fore_colors['RESET']
+            logging.DEBUG:  log_format + fore_colors['CYAN'] + '%(message)s' + fore_colors['RESET'],
+            logging.INFO: log_format + fore_colors["RESET"] + '%(message)s' + fore_colors['RESET'],
+            logging.SUCCESS: log_format + fore_colors['GREEN'] + '%(message)s' + fore_colors['RESET'],
+            logging.WARNING:  log_format + fore_colors['YELLOW'] + '%(message)s' + fore_colors['RESET'],
+            logging.ERROR:  log_format + fore_colors['RED'] + '%(message)s' + fore_colors['RESET'],
+            logging.CRITICAL:  log_format + fore_colors['LIGHT_RED'] + '%(message)s' + fore_colors['RESET'],
+            logging.FATAL:  log_format + fore_colors['LIGHT_RED'] + back_colors['LIGHT_WHITE'] + '%(message)s' + fore_colors['RESET']
         }
 
     def format_time(self,_record, _datefmt):
@@ -84,6 +86,7 @@ class LoggingFormatter(logging.Formatter):  # Without the sparkle :(
         self.FORMATS = {
             logging.DEBUG: custom_format,
             logging.INFO: custom_format,
+            logging.SUCCESS: custom_format,
             logging.WARNING: custom_format,
             logging.ERROR: custom_format,
             logging.CRITICAL: custom_format,
@@ -95,23 +98,18 @@ class LoggingFormatter(logging.Formatter):  # Without the sparkle :(
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 
-
-
-
-
-
-class Prettylogger():
-    def __init__(self,logger_name='Logger', version='0.0.0', log_file_path=None, info_color=None, log_level="DEBUG"):
+class Prettylogger:
+    def __init__(self,logger_name='Logger', version='0.0.0', log_file_path=None, log_level="DEBUG"):
         self.logger_name = logger_name
         self.version = version
         self.log_file_path = log_file_path
-        self.info_color = info_color
         self.log_level = log_level
 
         # Initialize colorama
         self.logger = logging.getLogger(logger_name)
         self.logger.setLevel(self.parse_log_level(self.log_level))
         self.ch = logging.StreamHandler()
+        self.logger.success = self.success # Add new Success log level to logger object
         self.update_format()
 
         if self.log_file_path:
@@ -125,14 +123,19 @@ class Prettylogger():
     def update_format(self):
         #allows info to be updated later
         self.ch.setLevel(logging.DEBUG)
-        self.ch.setFormatter(PrettyLoggingFormatter(self.logger_name, self.version, self.info_color))
+        self.ch.setFormatter(PrettyLoggingFormatter(self.logger_name, self.version))
         self.logger.addHandler(self.ch)
+
+    def success(self, message): # logs a SUCCESS message when called
+        self.logger.log(25,message)
 
     def parse_log_level(self, log_level):
         if log_level == "DEBUG":
             return logging.DEBUG
         elif log_level == "INFO":
             return logging.INFO
+        elif log_level == "SUCCESS":
+            return logging.SUCCESS
         elif log_level == "WARN":
             return logging.WARN
         elif log_level == "ERROR":
@@ -144,6 +147,7 @@ class Prettylogger():
             exit(1)
 
 
+
 if __name__ == '__main__':
     # Good Example
     LOGGER_NAME = 'my_log'
@@ -153,7 +157,8 @@ if __name__ == '__main__':
     log=log_settings.logger
     log.debug("debug message")
     log.info("info message")
-    log.warning("info message")
+    log.success('success message')
+    log.warning("warning message")
     log_settings.version = '0.0.2'
     log_settings.update_format()
     log.error("error message")

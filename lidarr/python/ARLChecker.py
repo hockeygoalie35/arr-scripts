@@ -318,7 +318,6 @@ class TelegramBot:
         async def send_expired_token_notification(application):
             await application.bot.sendMessage(chat_id=self.telegram_chat_id, text=EXPIRE_MESSAGE+EXPIRE_COMMANDS, disable_web_page_preview=True)
             log.info( "Telegram Bot Sent ARL Token Expiry Message " )
-            # TODO: Get Chat ID/ test on new bot
 
         # start bot control
         self.application = ApplicationBuilder().token(self.telegram_bot_token).post_init(send_expired_token_notification).build()
@@ -381,12 +380,12 @@ class TelegramBot:
 
 
 class NtfyBot:
-    def __init__(self,parent, server_plus_topic, token, poll_interval=1):
+    def __init__(self,parent, server_plus_topic, token):
         self.parent = parent
         self.server_plus_topic = server_plus_topic
         self.token = token
         self.command_dict = {"/set_token":self.set_token,"/cancel":self.cancel, "/disable":self.disable_bot}
-        self.poll_interval = poll_interval
+        self.poll_interval = 5
         self.last_response = ''
 
     def ntfy_notify(self, message, expect_response=False):  # Send Notification to ntfy topic
@@ -428,8 +427,9 @@ class NtfyBot:
                         log.debug(line.decode('utf-8'))
                         response = json.loads(line.decode('utf-8'))['message']
                     except Exception as e:
-                        if json.loads(line.decode('utf-8'))['content']:
-                            log.error(f"NTFY Server Response: Code {json.loads(response.content)['http']} - {json.loads(response.content)['error']}")
+                        print(json.loads(line.decode('utf-8')))
+                        if json.loads(line.decode('utf-8'))['http']:
+                            log.error(f"NTFY Server Response: Code {json.loads(line.decode('utf-8'))['http']} - {json.loads(line.decode('utf-8'))['error']}")
                             exit(1)
                         else:
                             print(e)
